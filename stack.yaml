@@ -1,0 +1,24 @@
+resolver: lts-9.0
+
+packages:
+- .
+- location:
+    git: https://github.com/biocad/web-template
+    commit: 0.1.0.2
+  extra-dep: true
+- location:
+    git: https://github.com/ozzzzz/monique.git
+    commit: 4152eadf59f2d971398191f8827b3074b1b88be7
+  subdirs:
+    - monique-core
+  extra-dep: true
+
+extra-deps:
+- distributed-process-0.7.3
+
+flags: {}
+
+extra-package-dbs: []
+
+ghc-options:
+  "*": -Wall
