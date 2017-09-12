@@ -71,7 +71,7 @@ runWorker processing WorkerConfig{..} = do
                         failedTask <- liftIO . failTask task . pack . show $ err
 
                         liftIO . send toController [] . toBS . toQMessage $ failedTask
-                        throwError $ WorkerError "worker" (show err)
+                        throwError $ WorkerError name (show err)
                   pure ()
 
                 other -> throwError . ParseError . UnexpectedMsgType . show $ other

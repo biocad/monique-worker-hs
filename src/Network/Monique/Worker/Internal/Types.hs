@@ -1,12 +1,11 @@
 module Network.Monique.Worker.Internal.Types
-  ( Processing, WorkerResult (..), UType, UData, Version, TaskResult (..)
+  ( Processing, WorkerResult (..), UType, UData, TaskResult (..)
   , throwWorkerError
   ) where
 
 import           Control.Monad.Except       (ExceptT, throwError)
 import           Network.Monique.Core       (UserId)
-import           Network.Monique.Core.Data  (TaskResult (..), UData, UType,
-                                             Version)
+import           Network.Monique.Core.Data  (TaskResult (..), UData, UType)
 import           Network.Monique.Core.Error (MoniqueError (..))
 
 
@@ -20,3 +19,4 @@ type Processing a = UserId -> a -> ExceptT MoniqueError IO WorkerResult
 
 throwWorkerError :: WorkerName -> String -> ExceptT MoniqueError IO WorkerResult
 throwWorkerError workerName = throwError . WorkerError workerName
+  
