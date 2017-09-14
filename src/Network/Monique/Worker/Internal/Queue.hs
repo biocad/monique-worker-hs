@@ -4,8 +4,11 @@ module Network.Monique.Worker.Internal.Queue
   ( runWorker, WorkerConfig (..)
   ) where
 
+import           Control.Exception                     (SomeException (..),
+                                                        catch)
 import           Control.Monad                         (forever)
-import           Control.Monad.Except
+import           Control.Monad.Except                  (ExceptT, runExceptT,
+                                                        throwError)
 import           Control.Monad.IO.Class                (liftIO)
 import           Data.Aeson                            (FromJSON (..))
 import           Data.ByteString                       (ByteString)
@@ -67,11 +70,14 @@ runWorker processing WorkerConfig{..} = do
                           _ <- liftIO . send toController [] . toBS . toQMessage $ completedTask
                           pure ()
 
-                  _ <- tryResult `catchError` \err -> do
-                        failedTask <- liftIO . failTask task . pack . show $ err
-
-                        liftIO . send toController [] . toBS . toQMessage $ failedTask
-                        throwError $ WorkerError name (show err)
-                  pure ()
+                  result <- liftIO $ catch (runExceptT tryResult) catchSomeException
+                  either throwError pure result
+                    where catchSomeException :: SomeException -> IO (Either MoniqueError ())
+                          catchSomeException err = do
+                              failedTask <- failTask task . pack . show $ err
+                              send toController [] . toBS . toQMessage $ failedTask
+                              pure $ Left $ WorkerError name (show err)
 
                 other -> throwError . ParseError . UnexpectedMsgType . show $ other
+
+
