@@ -3,10 +3,6 @@ resolver: lts-9.0
 packages:
 - .
 - location:
-    git: https://github.com/biocad/web-template
-    commit: 0.1.0.2
-  extra-dep: true
-- location:
     git: https://github.com/biocad/monique.git
     commit: 0.2.0.0
   subdirs:
