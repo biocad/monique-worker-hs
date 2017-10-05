@@ -1,5 +1,5 @@
 name:                monique-worker-hs
-version:             0.2.0.3
+version:             0.2.1.0
 synopsis:            Worker library for monique system
 description:
   Worker library for monique system
@@ -26,7 +26,28 @@ library
                      , optparse-generic
                      , bytestring
                      , zeromq4-haskell
+                     , exceptions
                      , text
+                     , mtl
+  default-language:    Haskell2010
+
+executable exampleA
+  hs-source-dirs:      app
+  main-is:             ExampleA.hs
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  build-depends:       base
+                     , monique-worker-hs
+                     , aeson
+                     , mtl
+  default-language:    Haskell2010
+
+executable exampleB
+  hs-source-dirs:      app
+  main-is:             ExampleB.hs
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  build-depends:       base
+                     , monique-worker-hs
+                     , aeson
                      , mtl
   default-language:    Haskell2010
 
