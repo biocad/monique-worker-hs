@@ -10,13 +10,14 @@ module Network.Monique.Worker.Internal.App
   ( runApp, moniqueHost
   ) where
 
-import           Control.Monad.State                   (evalStateT)
+import           Control.Monad.Except
+import           Control.Monad.State                   (evalStateT, liftIO)
 import           Data.Aeson                            (FromJSON (..))
 import           Data.Maybe                            (fromMaybe)
 import           Network.Monique.Core                  (Host, Port, moniqueHost)
 import           Network.Monique.Worker.Internal.Queue (WorkerConfig (..),
                                                         runWorker)
-import           Network.Monique.Worker.Internal.Types (Processing)
+import           Network.Monique.Worker.Internal.Types (Algo)
 import           Options.Generic
 
 
@@ -29,8 +30,13 @@ data RunOptions w = RunOptions { name :: w ::: String     <?> "Worker name for l
 instance ParseRecord (RunOptions Wrapped)
 deriving instance Show (RunOptions Unwrapped)
 
-runApp :: FromJSON a => s -> Processing a s -> IO ()
-runApp initialState process = do
+runApp
+  :: FromJSON a
+  => s        -- ^ initial state
+  -> Algo a s -- ^ algorithm to execute
+  -> IO ()
+runApp initialState algo = do
     RunOptions{..} <- unwrapRecord "Monique worker start"
     let workerConfig = WorkerConfig name (fromMaybe moniqueHost host) port
-    evalStateT (runWorker process workerConfig) initialState
+    _ <- liftIO . runExceptT . evalStateT (runWorker algo workerConfig) $ initialState
+    pure ()

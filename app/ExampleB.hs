@@ -6,7 +6,7 @@ import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.State    (get, put)
 import           Data.Aeson             (FromJSON (..), ToJSON (..))
 import           GHC.Generics           (Generic)
-import qualified Network.Monique.Worker as W (Processing, TaskResult (..),
+import qualified Network.Monique.Worker as W (Algo, TaskResult (..),
                                               WorkerResult (..), runApp)
 
 main :: IO ()
@@ -28,7 +28,7 @@ instance ToJSON ExampleBResult
 version :: Int
 version = 1
 
-exampleBProcess :: W.Processing ExampleBConfig Int
+exampleBProcess :: W.Algo ExampleBConfig Int
 exampleBProcess _ _ (ExampleBConfig configB') = do
     liftIO $ print configB'
 
@@ -41,6 +41,6 @@ exampleBProcess _ _ (ExampleBConfig configB') = do
     let taskResult = W.TaskResult version (toJSON response)
     let userdata = []
 
-    pure . pure $ W.WorkerResult taskResult userdata
+    pure $ W.WorkerResult taskResult userdata
 
 

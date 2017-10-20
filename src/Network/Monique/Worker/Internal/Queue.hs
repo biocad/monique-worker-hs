@@ -7,24 +7,23 @@ module Network.Monique.Worker.Internal.Queue
 
 import           Control.Monad                         (forever)
 import           Control.Monad.Catch                   (SomeException, catch)
-import           Control.Monad.Except                  (runExcept,
-                                                        runExceptT, throwError)
-import           Control.Monad.State                   (StateT, lift, liftIO)
+import           Control.Monad.Except                  (catchError)
+import           Control.Monad.State                   (lift, liftIO)
 import           Data.Aeson                            (FromJSON (..))
 import           Data.Text                             (pack)
 import           Network.Monique.Core                  (Host, Port, twinPort)
 import           Network.Monique.Core.Data             (Property (..),
                                                         Task (..), completeTask,
                                                         failTask, newUserdata)
-import           Network.Monique.Core.Error            (MoniqueError (..),
-                                                        ParseError (..))
+import           Network.Monique.Core.Error            (MoniqueError (..))
 import           Network.Monique.Core.Json             (exceptDecodeBS,
                                                         exceptDecodeValue, toBS)
 import           Network.Monique.Core.Queue            (QContent (..),
                                                         QMessage (..),
                                                         createAndConnect,
                                                         toQMessage)
-import           Network.Monique.Worker.Internal.Types (Processing, WorkerName,
+import           Network.Monique.Worker.Internal.Types (Algo, Stateful,
+                                                        WorkerName,
                                                         WorkerResult (..))
 import           System.ZMQ4                           (Pull (..), Push (..),
                                                         Socket, context,
@@ -35,49 +34,56 @@ data WorkerConfig = WorkerConfig { name            :: WorkerName
                                  , fromControllerP :: Port
                                  }
 
-runWorker :: FromJSON a => Processing a s -> WorkerConfig -> StateT s IO ()
-runWorker processing WorkerConfig{..} = do
-    (toController, fromController) <- lift connections
+runWorker
+    :: FromJSON a
+    => Algo a s
+    -> WorkerConfig
+    -> Stateful s ()
+runWorker algo WorkerConfig{..} = do
+    (toController, fromController) <- liftIO connections
     forever $ do
-        messageByteString <- lift (receive fromController)
+        msg                  <- liftIO $ receive fromController
+        QMessage{cnt = cnt'} <- lift   $ exceptDecodeBS msg
+        case cnt' of
+          T task@Task{} -> runAlgo algo toController task `catchError` moniqueErrorHandler
+          other         -> liftIO . print $ "Error Network.Monique.Worker.Internal.Queue: " ++ show other
 
-        let parseQMessage = do
-                QMessage{..} <- exceptDecodeBS messageByteString
-                case cnt of
-                  T t@Task{..} -> exceptDecodeValue tConfig >>= \config -> pure (config, t)
-                  other        -> throwError . ParseError . UnexpectedMsgType . show $ other
+  where
+    (_, toControllerP) = twinPort fromControllerP
 
-        parsedEither <- lift $ runExceptT parseQMessage
-        case parsedEither of
-            Right (config, task@Task{..}) -> do
+    connections :: IO (Socket Push, Socket Pull)
+    connections = do
+        context' <- context
+        toController <- createAndConnect context' Push controllerH toControllerP
+        fromController <- createAndConnect context' Pull controllerH fromControllerP
+        return (toController, fromController)
 
-                eitherResult <- (runExcept <$> processing tUser name config) `catch` catchSomeException
+    moniqueErrorHandler :: MoniqueError -> Stateful s ()
+    moniqueErrorHandler err = liftIO (print err) >> pure ()
 
-                let goodWay WorkerResult{..} = do
-                      completedTask <- completeTask task taskResult
-                      userdata <- mapM (uncurry $ newUserdata tUser Created) userdataList
+    runAlgo
+        :: FromJSON a
+        => Algo a s
+        -> Socket Push
+        -> Task
+        -> Stateful s ()
+    runAlgo algo' toController task@Task{..} =
+      executeAlgo algo' `catchError` workerExceptionHandler
+                        `catch` (\(x :: SomeException) -> workerExceptionHandler x)
+      where
+        executeAlgo :: FromJSON a => Algo a s -> Stateful s ()
+        executeAlgo algo'' = do
+            taskConfig       <- lift $ exceptDecodeValue tConfig
+            WorkerResult{..} <- algo'' tUser name taskConfig
 
-                      _ <- liftIO . sequence $ (send toController [] . toBS . toQMessage) <$> userdata
-                      _ <- liftIO . send toController [] . toBS . toQMessage $ completedTask
-                      pure ()
-                let badWay err = do
-                      failedTask <- failTask task . pack . show $ err
-                      _ <- liftIO . send toController [] . toBS . toQMessage $ failedTask
-                      pure ()
+            completedTask    <- completeTask task taskResult
+            userdatas        <- mapM (uncurry $ newUserdata tUser Created) userdataList
 
-                either badWay goodWay eitherResult
+            _ <- liftIO . mapM (send toController [] . toBS . toQMessage) $ userdatas
+            _ <- liftIO .       send toController [] . toBS . toQMessage  $ completedTask
+            pure ()
 
-            Left err -> lift $ print err >> pure ()
-
-
-     where
-       (_, toControllerP) = twinPort fromControllerP
-       connections :: IO (Socket Push, Socket Pull)
-       connections = do
-           context' <- context
-           toController <- createAndConnect context' Push controllerH toControllerP
-           fromController <- createAndConnect context' Pull controllerH fromControllerP
-           return (toController, fromController)
-
-       catchSomeException :: SomeException -> StateT s IO (Either MoniqueError WorkerResult)
-       catchSomeException err = liftIO $ pure $ Left $ WorkerError name (show err)
+        workerExceptionHandler :: Show a => a -> Stateful s ()
+        workerExceptionHandler err = do
+            failedTask <- failTask task . pack . show $ err
+            liftIO . send toController [] . toBS . toQMessage $ failedTask
