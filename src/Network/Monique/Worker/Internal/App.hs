@@ -22,10 +22,13 @@ import           Options.Generic
 
 
 
-data RunOptions w = RunOptions { name :: w ::: String     <?> "Worker name for logging"
-                               , host :: w ::: Maybe Host <?> "Host where controller live (default: monique.bi.biocad.ru)"
-                               , port :: w ::: Port       <?> "Port where controller live"
-                               } deriving (Generic)
+data RunOptions w =
+  RunOptions { name :: w  ::: String     <?> "Worker name for logging"
+             , host :: w  ::: Maybe Host <?> "Host where controller lives (default: monique.bi.biocad.ru)"
+             , port :: w  ::: Port       <?> "Port where controller lives"
+             , hostS :: w ::: Maybe Host <?> "Host where scheduler lives (default: monique.bi.biocad.ru)"
+             , portS :: w ::: Port       <?> "Port where scheduler lives (usually 4050 for Local/Develop and 5050 for Production)"
+             } deriving (Generic)
 
 instance ParseRecord (RunOptions Wrapped)
 deriving instance Show (RunOptions Unwrapped)
@@ -37,6 +40,6 @@ runApp
   -> IO ()
 runApp initialState algo = do
     RunOptions{..} <- unwrapRecord "Monique worker start"
-    let workerConfig = WorkerConfig name (fromMaybe moniqueHost host) port
+    let workerConfig = WorkerConfig name (fromMaybe moniqueHost host) port (fromMaybe moniqueHost hostS) portS
     _ <- liftIO . runExceptT . evalStateT (runWorker algo workerConfig) $ initialState
     pure ()

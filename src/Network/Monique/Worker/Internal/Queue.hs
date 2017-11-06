@@ -23,16 +23,23 @@ import           Network.Monique.Core.Queue            (QContent (..),
                                                         createAndConnect,
                                                         toQMessage)
 import           Network.Monique.Worker.Internal.Types (Algo, Stateful,
+                                                        WorkerConnections (..),
+                                                        WorkerInfo (..),
                                                         WorkerName,
                                                         WorkerResult (..))
 import           System.ZMQ4                           (Pull (..), Push (..),
-                                                        Socket, context,
+                                                        Sub (..), context,
                                                         receive, send)
 
-data WorkerConfig = WorkerConfig { name            :: WorkerName
-                                 , controllerH     :: Host
-                                 , fromControllerP :: Port
-                                 }
+
+
+data WorkerConfig =
+     WorkerConfig { name            :: WorkerName
+                  , controllerH     :: Host
+                  , fromControllerP :: Port
+                  , queueH          :: Host
+                  , fromQueueP      :: Port
+                  }
 
 runWorker
     :: FromJSON a
@@ -40,23 +47,26 @@ runWorker
     -> WorkerConfig
     -> Stateful s ()
 runWorker algo WorkerConfig{..} = do
-    (toController, fromController) <- liftIO connections
+    workerConnections@WorkerConnections{..} <- liftIO connections
     forever $ do
         msg                  <- liftIO $ receive fromController
         QMessage{cnt = cnt'} <- lift   $ exceptDecodeBS msg
         case cnt' of
-          T task@Task{} -> runAlgo algo toController task `catchError` moniqueErrorHandler
+          T task@Task{} -> runAlgo algo workerConnections task `catchError` moniqueErrorHandler
           other         -> liftIO . print $ "Error Network.Monique.Worker.Internal.Queue: " ++ show other
 
   where
     (_, toControllerP) = twinPort fromControllerP
+    (_, toQueueP)      = twinPort fromQueueP
 
-    connections :: IO (Socket Push, Socket Pull)
+    connections :: IO WorkerConnections
     connections = do
         context' <- context
-        toController <- createAndConnect context' Push controllerH toControllerP
+        toController   <- createAndConnect context' Push controllerH toControllerP
         fromController <- createAndConnect context' Pull controllerH fromControllerP
-        return (toController, fromController)
+        toQueue        <- createAndConnect context' Push queueH toQueueP
+        fromQueue      <- createAndConnect context' Sub  queueH fromQueueP
+        pure $ WorkerConnections toController fromController toQueue fromQueue
 
     moniqueErrorHandler :: MoniqueError -> Stateful s ()
     moniqueErrorHandler err = liftIO (print err) >> pure ()
@@ -64,17 +74,18 @@ runWorker algo WorkerConfig{..} = do
     runAlgo
         :: FromJSON a
         => Algo a s
-        -> Socket Push
+        -> WorkerConnections
         -> Task
         -> Stateful s ()
-    runAlgo algo' toController task@Task{..} =
+    runAlgo algo' workerConnections@WorkerConnections{..} task@Task{..} =
       executeAlgo algo' `catchError` workerExceptionHandler
                         `catch` (\(x :: SomeException) -> workerExceptionHandler x)
       where
         executeAlgo :: FromJSON a => Algo a s -> Stateful s ()
         executeAlgo algo'' = do
             taskConfig       <- lift $ exceptDecodeValue tConfig
-            WorkerResult{..} <- algo'' tUser name taskConfig
+            let workerInfo = WorkerInfo tUser tId name workerConnections
+            WorkerResult{..} <- algo'' workerInfo taskConfig
 
             completedTask    <- completeTask task taskResult
             userdatas        <- mapM (uncurry $ newUserdata tUser Created) userdataList
@@ -87,3 +98,4 @@ runWorker algo WorkerConfig{..} = do
         workerExceptionHandler err = do
             failedTask <- failTask task . pack . show $ err
             liftIO . send toController [] . toBS . toQMessage $ failedTask
+

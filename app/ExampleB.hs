@@ -29,7 +29,7 @@ version :: Int
 version = 1
 
 exampleBProcess :: W.Algo ExampleBConfig Int
-exampleBProcess _ _ (ExampleBConfig configB') = do
+exampleBProcess _ (ExampleBConfig configB') = do
     liftIO $ print configB'
 
     -- how to work with state
