@@ -19,6 +19,8 @@ import           Network.Monique.Worker.Internal.Queue (WorkerConfig (..),
                                                         runWorker)
 import           Network.Monique.Worker.Internal.Types (Algo)
 import           Options.Generic
+import           System.IO                             (BufferMode (..),
+                                                        hSetBuffering, stdout)
 
 
 
@@ -39,6 +41,7 @@ runApp
   -> Algo a s -- ^ algorithm to execute
   -> IO ()
 runApp initialState algo = do
+    hSetBuffering stdout LineBuffering
     RunOptions{..} <- unwrapRecord "Monique worker start"
     let workerConfig = WorkerConfig name (fromMaybe moniqueHost host) port (fromMaybe moniqueHost hostS) portS
     _ <- liftIO . runExceptT . evalStateT (runWorker algo workerConfig) $ initialState
