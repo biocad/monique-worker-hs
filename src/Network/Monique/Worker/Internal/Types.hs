@@ -3,21 +3,24 @@
 module Network.Monique.Worker.Internal.Types
   ( Algo, Stateful
   , WorkerResult (..)
-  , WorkerName , WorkerConnections (..), WorkerInfo (..)
+  , WorkerName (..)
+  , WorkerConnections (..), WorkerInfo (..)
+  , WorkerConfig (..)
   , throwWorkerError, throwWorkerErrorI
   , UType, UData, TaskResult (..), UserId, TaskMessage
   ) where
 
 import           Control.Monad.Except       (ExceptT, throwError)
 import           Control.Monad.State        (StateT)
-import           Network.Monique.Core       (UserId)
-import           Network.Monique.Core.Data  (TaskId, TaskResult (..), UData, TaskMessage,
-                                             UType)
+import           Network.Monique.Core       (Host, Port, UserId)
+import           Network.Monique.Core.Data  (TaskId, TaskMessage,
+                                             TaskResult (..), UData, UType)
 import           Network.Monique.Core.Error (MoniqueError (..))
-import           System.ZMQ4                (Push (..), Socket, Sub (..), Pull (..))
+import           System.ZMQ4                (Pull (..), Push (..), Socket,
+                                             Sub (..))
 
 
-type WorkerName = String
+newtype WorkerName = WorkerName { wName :: String }
 
 type Stateful s a = StateT s (ExceptT MoniqueError IO) a
 
@@ -25,26 +28,33 @@ data WorkerResult = WorkerResult { taskResult   :: TaskResult
                                  , userdataList :: [(UType, UData)]
                                  } deriving (Show)
 
-data WorkerInfo = WorkerInfo { curUserId        :: UserId      -- ^ use UserId to save userdata
-                             , curTaskId        :: TaskId      -- ^ use TaskId to call foreign workers
-                             , workerName :: WorkerName  -- ^ use WorkerName to throw error and write log
+data WorkerInfo = WorkerInfo { curUserId   :: UserId      -- ^ use UserId to save userdata
+                             , curTaskId   :: TaskId      -- ^ use TaskId to call foreign workers
+                             , workerName  :: WorkerName  -- ^ use WorkerName to throw error and write log
                              , connections :: WorkerConnections
                              }
 
-data WorkerConnections = WorkerConnections { toController :: Socket Push
+data WorkerConfig =
+     WorkerConfig { controllerH     :: Host
+                  , fromControllerP :: Port
+                  , queueH          :: Host
+                  , fromQueueP      :: Port
+                  }
+
+data WorkerConnections = WorkerConnections { toController   :: Socket Push
                                            , fromController :: Socket Pull
-                                           , toQueue :: Socket Push
-                                           , fromQueue :: Socket Sub
+                                           , toQueue        :: Socket Push
+                                           , fromQueue      :: Socket Sub
                                            }
 
 type Algo a s
-  =  WorkerInfo
+  =  WorkerInfo              -- ^ use it to generate errors and call foreign workers
   -> a                       -- ^ config to run algorithm
   -> Stateful s WorkerResult -- ^ return result in StateT monad
 
 throwWorkerError :: WorkerName -> String -> Stateful s WorkerResult
-throwWorkerError wn = throwError . WorkerError wn
+throwWorkerError WorkerName{..} = throwError . WorkerError wName
 
 throwWorkerErrorI :: WorkerInfo -> String -> Stateful s WorkerResult
-throwWorkerErrorI WorkerInfo {..} = throwError . WorkerError workerName
+throwWorkerErrorI WorkerInfo{..} = throwWorkerError workerName
 

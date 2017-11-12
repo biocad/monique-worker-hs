@@ -11,7 +11,7 @@ import           Control.Monad.Except                  (catchError)
 import           Control.Monad.State                   (lift, liftIO)
 import           Data.Aeson                            (FromJSON (..))
 import           Data.Text                             (pack)
-import           Network.Monique.Core                  (Host, Port, twinPort)
+import           Network.Monique.Core                  (twinPort)
 import           Network.Monique.Core.Data             (Property (..),
                                                         Task (..), completeTask,
                                                         failTask, newUserdata)
@@ -23,6 +23,7 @@ import           Network.Monique.Core.Queue            (QContent (..),
                                                         createAndConnect,
                                                         toQMessage)
 import           Network.Monique.Worker.Internal.Types (Algo, Stateful,
+                                                        WorkerConfig (..),
                                                         WorkerConnections (..),
                                                         WorkerInfo (..),
                                                         WorkerName,
@@ -33,20 +34,15 @@ import           System.ZMQ4                           (Pull (..), Push (..),
 
 
 
-data WorkerConfig =
-     WorkerConfig { name            :: WorkerName
-                  , controllerH     :: Host
-                  , fromControllerP :: Port
-                  , queueH          :: Host
-                  , fromQueueP      :: Port
-                  }
+
 
 runWorker
     :: FromJSON a
-    => Algo a s
+    => WorkerName
+    -> Algo a s
     -> WorkerConfig
     -> Stateful s ()
-runWorker algo WorkerConfig{..} = do
+runWorker name algo WorkerConfig{..} = do
     workerConnections@WorkerConnections{..} <- liftIO connections
     forever $ do
         msg                  <- liftIO $ receive fromController

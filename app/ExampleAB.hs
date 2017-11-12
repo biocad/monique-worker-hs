@@ -1,6 +1,6 @@
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards   #-}
 
 module Main where
 
@@ -8,34 +8,39 @@ import           Control.Monad.IO.Class (liftIO)
 import           Data.Aeson             (FromJSON (..), ToJSON (..))
 import           GHC.Generics           (Generic)
 import qualified Network.Monique.Worker as W (Algo, TaskResult (..),
+                                              WorkerName (..),
                                               WorkerResult (..),
                                               callForeignWorker, runApp)
 
 main :: IO ()
-main = W.runApp () exampleABProcess
+main = W.runApp exampleABName () exampleABProcess
 
-newtype ExampleABConfig = ExampleABConfig { exampleABConfig :: String }
+newtype ExampleABConfig = ExampleABConfig { configAB :: String }
   deriving (Generic)
 instance FromJSON ExampleABConfig
 instance ToJSON ExampleABConfig
 
-newtype ExampleABResult = ExampleABResult { exampleABResult :: Float }
+newtype ExampleABResult = ExampleABResult { resultAB :: Float }
   deriving (Show, Generic)
 instance ToJSON ExampleABResult
+instance FromJSON ExampleABResult
 
 version :: Int
 version = 1
+
+exampleABName :: W.WorkerName
+exampleABName = W.WorkerName "exampleAB"
 
 exampleABProcess :: W.Algo ExampleABConfig ()
 exampleABProcess workerInfo (ExampleABConfig exampleABConfig') = do
     liftIO $ print exampleABConfig'
 
     let configA = ExampleAConfig exampleABConfig'
-    ea@ExampleAResult{..} <- W.callForeignWorker "exampleA" configA workerInfo
+    ea@ExampleAResult{..} <- W.callForeignWorker exampleAName configA workerInfo
     liftIO . print $ "After worker exampleA:" ++ show ea
 
     let configB = ExampleBConfig $ fromIntegral resultA
-    eb@ExampleBResult{..} <- W.callForeignWorker "exampleB" configB workerInfo
+    eb@ExampleBResult{..} <- W.callForeignWorker exampleBName configB workerInfo
     liftIO . print $ "After worker exampleB:" ++ show eb
 
     let response = ExampleABResult (sin resultB)
@@ -46,6 +51,9 @@ exampleABProcess workerInfo (ExampleABConfig exampleABConfig') = do
 
 
 -- In real application import this code from worker library
+
+exampleAName :: W.WorkerName
+exampleAName = W.WorkerName "exampleA"
 
 newtype ExampleAConfig = ExampleAConfig { configA :: String }
   deriving (Generic)
@@ -59,6 +67,9 @@ instance FromJSON ExampleAResult
 
 
 -- In real application import this code from worker library
+
+exampleBName :: W.WorkerName
+exampleBName = W.WorkerName "exampleB"
 
 newtype ExampleBConfig = ExampleBConfig { configB :: Float }
   deriving (Generic)

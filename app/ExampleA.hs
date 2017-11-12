@@ -7,11 +7,12 @@ import           Control.Monad.IO.Class (liftIO)
 import           Data.Aeson             (FromJSON (..), ToJSON (..))
 import           GHC.Generics           (Generic)
 import qualified Network.Monique.Worker as W (Algo, TaskResult (..),
+                                              WorkerName (..),
                                               WorkerResult (..), runApp,
                                               throwWorkerErrorI)
 
 main :: IO ()
-main = W.runApp () exampleAProcess
+main = W.runApp exampleAName () exampleAProcess
 
 newtype ExampleAConfig = ExampleAConfig { configA :: String }
   deriving (Generic)
@@ -25,6 +26,9 @@ instance ToJSON ExampleAResult
 
 version :: Int
 version = 1
+
+exampleAName :: W.WorkerName
+exampleAName = W.WorkerName "exampleA"
 
 exampleAProcess :: W.Algo ExampleAConfig ()
 exampleAProcess workerInfo (ExampleAConfig configA') = do

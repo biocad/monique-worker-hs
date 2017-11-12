@@ -9,11 +9,10 @@ import           Control.Monad.State                   (lift, liftIO)
 import           Data.Aeson                            (FromJSON (..),
                                                         ToJSON (..))
 import           Data.Maybe                            (fromJust)
-import           Data.Text                             (unpack)
+import           Data.Text                             (pack, unpack)
 import           Network.Monique.Core                  (generateId)
 import           Network.Monique.Core.Data             (Task (..), TaskId,
                                                         TaskResult (..),
-                                                        TaskSpec,
                                                         TaskStatus (..),
                                                         newTask)
 import           Network.Monique.Core.Error            (MoniqueError (..))
@@ -25,15 +24,17 @@ import           Network.Monique.Core.Queue            (QContent (..),
                                                         tagsToBS, toQMessage)
 import           Network.Monique.Worker.Internal.Types (Stateful,
                                                         WorkerConnections (..),
-                                                        WorkerInfo (..))
+                                                        WorkerInfo (..),
+                                                        WorkerName (..))
 import           System.ZMQ4                           (Socket, Sub (..),
                                                         receiveMulti, send,
                                                         subscribe, unsubscribe)
 
 
 
-callForeignWorker :: (ToJSON a, FromJSON b) => TaskSpec -> a -> WorkerInfo -> Stateful s b
-callForeignWorker taskSpec taskConfigJSON WorkerInfo{..} = do
+callForeignWorker :: (ToJSON a, FromJSON b) => WorkerName -> a -> WorkerInfo -> Stateful s b
+callForeignWorker workerName' taskConfigJSON WorkerInfo{..} = do
+        let taskSpec = pack $ wName workerName'
         let taskConfig = toJSON taskConfigJSON
         let WorkerConnections{..} = connections
         taskId <- generateId
@@ -48,7 +49,7 @@ callForeignWorker taskSpec taskConfigJSON WorkerInfo{..} = do
         liftIO $ unsubscribe fromQueue $ tagsToBS (tagTaskStatusSpec Completed taskSpec)
         liftIO $ unsubscribe fromQueue $ tagsToBS (tagTaskStatusSpec Failed taskSpec)
 
-        let throwWError = throwError . WorkerError workerName
+        let throwWError = throwError . WorkerError (wName workerName)
 
         case tStatus of
             Completed -> lift . exceptDecodeValue . content . fromJust $ tResult

@@ -7,10 +7,11 @@ import           Control.Monad.State    (get, put)
 import           Data.Aeson             (FromJSON (..), ToJSON (..))
 import           GHC.Generics           (Generic)
 import qualified Network.Monique.Worker as W (Algo, TaskResult (..),
+                                              WorkerName (..),
                                               WorkerResult (..), runApp)
 
 main :: IO ()
-main = W.runApp initialState exampleBProcess
+main = W.runApp exampleBName initialState exampleBProcess
   where initialState = 0
 
 newtype ExampleBConfig = ExampleBConfig { configB :: Float }
@@ -27,6 +28,9 @@ instance ToJSON ExampleBResult
 
 version :: Int
 version = 1
+
+exampleBName :: W.WorkerName
+exampleBName = W.WorkerName "exampleB"
 
 exampleBProcess :: W.Algo ExampleBConfig Int
 exampleBProcess _ (ExampleBConfig configB') = do
