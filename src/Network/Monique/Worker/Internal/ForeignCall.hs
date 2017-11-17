@@ -26,35 +26,45 @@ import           Network.Monique.Worker.Internal.Types (Stateful,
                                                         WorkerConnections (..),
                                                         WorkerInfo (..),
                                                         WorkerName (..))
+import           System.Log.Logger                     (errorM, infoM)
 import           System.ZMQ4                           (Socket, Sub (..),
                                                         receiveMulti, send,
                                                         subscribe, unsubscribe)
 
 
-
 callForeignWorker :: (ToJSON a, FromJSON b) => WorkerName -> a -> WorkerInfo -> Stateful s b
 callForeignWorker workerName' taskConfigJSON WorkerInfo{..} = do
-        let taskSpec = pack $ wName workerName'
-        let taskConfig = toJSON taskConfigJSON
-        let WorkerConnections{..} = connections
-        taskId <- generateId
-        newTask' <- newTask taskId (Just curTaskId) curUserId taskSpec taskConfig
 
-        liftIO $ subscribe fromQueue $ tagsToBS (tagTaskStatusSpec Completed taskSpec)
-        liftIO $ subscribe fromQueue $ tagsToBS (tagTaskStatusSpec Failed taskSpec)
-        liftIO $ send toQueue [] . toBS . toQMessage $ newTask'
+    let logFunc level msg = liftIO . level (wName workerName) $ wName workerName' ++ " (foreign worker): " ++ msg
+    logFunc infoM "calling..."
+    
+    let taskSpec = pack $ wName workerName'
+    let taskConfig = toJSON taskConfigJSON
+    let WorkerConnections{..} = connections
+    taskId <- generateId
+    newTask' <- newTask taskId (Just curTaskId) curUserId taskSpec taskConfig
 
-        Task{..} <- waitForReply taskId fromQueue -- TODO: probably place with deadlock if no one task is returned
+    liftIO $ subscribe fromQueue $ tagsToBS (tagTaskStatusSpec Completed taskSpec)
+    liftIO $ subscribe fromQueue $ tagsToBS (tagTaskStatusSpec Failed taskSpec)
+    liftIO $ send toQueue [] . toBS . toQMessage $ newTask'
 
-        liftIO $ unsubscribe fromQueue $ tagsToBS (tagTaskStatusSpec Completed taskSpec)
-        liftIO $ unsubscribe fromQueue $ tagsToBS (tagTaskStatusSpec Failed taskSpec)
+    Task{..} <- waitForReply taskId fromQueue -- TODO: probably place with deadlock if no one task is returned
+    logFunc infoM "get reply..."
+    liftIO $ unsubscribe fromQueue $ tagsToBS (tagTaskStatusSpec Completed taskSpec)
+    liftIO $ unsubscribe fromQueue $ tagsToBS (tagTaskStatusSpec Failed taskSpec)
 
-        let throwWError = throwError . WorkerError (wName workerName)
+    let throwWError = throwError . WorkerError (wName workerName)
 
-        case tStatus of
-            Completed -> lift . exceptDecodeValue . content . fromJust $ tResult
-            Failed    -> throwWError $ unpack taskSpec ++ " (foreign worker): " ++ unpack (fromJust tMessage)
-            status    -> throwWError $ "unexpected status foreign task: " ++ show status
+    case tStatus of
+        Completed -> do
+          logFunc infoM "task completed"
+          lift . exceptDecodeValue . content . fromJust $ tResult
+        Failed    -> do
+          logFunc errorM "task failed"
+          throwWError $ unpack taskSpec ++ " (foreign worker): " ++ unpack (fromJust tMessage)
+        status    -> do
+          logFunc errorM "unexpected status foreign task"
+          throwWError $ "unexpected status foreign task: " ++ show status
   where
     waitForReply :: TaskId -> Socket Sub -> Stateful s Task
     waitForReply taskId fromQueue' = do

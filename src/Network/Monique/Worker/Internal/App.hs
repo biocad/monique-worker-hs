@@ -17,17 +17,21 @@ import           Data.Maybe                            (fromMaybe)
 import           Network.Monique.Core                  (Host, Port, moniqueHost)
 import           Network.Monique.Worker.Internal.Queue (WorkerConfig (..),
                                                         runWorker)
-import           Network.Monique.Worker.Internal.Types (Algo, WorkerName)
+import           Network.Monique.Worker.Internal.Types (Algo, WorkerName (..))
 import           Options.Generic
 import           System.IO                             (BufferMode (..),
                                                         hSetBuffering, stdout)
-
+import           System.Log.Formatter
+import           System.Log.Handler                    (setFormatter)
+import           System.Log.Handler.Simple
+import           System.Log.Logger
 
 data RunOptions w =
-  RunOptions { host :: w  ::: Maybe Host <?> "Host to controller (default: monique.bi.biocad.ru)"
-             , port :: w  ::: Port       <?> "Port to controller"
-             , hostS :: w ::: Maybe Host <?> "Host to scheduler (default: monique.bi.biocad.ru)"
-             , portS :: w ::: Port       <?> "Port to scheduler (usually 4050 for Local/Develop and 5050 for Production)"
+  RunOptions { host :: w  ::: Maybe Host       <?> "Host to controller (default: monique.bi.biocad.ru)"
+             , port :: w  ::: Port             <?> "Port to controller"
+             , hostS :: w ::: Maybe Host       <?> "Host to scheduler (default: monique.bi.biocad.ru)"
+             , portS :: w ::: Port             <?> "Port to scheduler (usually 4050 for Local/Develop and 5050 for Production)"
+             , logfile :: w ::: Maybe FilePath <?> "Path to log file"
              } deriving (Generic)
 
 
@@ -40,9 +44,16 @@ runApp
   -> s          -- ^ initial state
   -> Algo a s   -- ^ algorithm to execute
   -> IO ()
-runApp name initialState algo = do
+runApp name@WorkerName{..} initialState algo = do
     hSetBuffering stdout LineBuffering
     RunOptions{..} <- unwrapRecord "Monique worker start"
+    
+    let logfile' = fromMaybe "debug.log" logfile
+    h <- fileHandler logfile' DEBUG >>= \lh -> return $
+         setFormatter lh (simpleLogFormatter "[$time : $loggername : $prio] $msg")
+    updateGlobalLogger wName (addHandler h)
+    updateGlobalLogger wName (setLevel DEBUG)
+    
     let workerConfig = WorkerConfig (fromMaybe moniqueHost host) port (fromMaybe moniqueHost hostS) portS
     _ <- liftIO . runExceptT . evalStateT (runWorker name algo workerConfig) $ initialState
     pure ()

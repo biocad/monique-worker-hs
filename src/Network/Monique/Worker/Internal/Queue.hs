@@ -26,13 +26,12 @@ import           Network.Monique.Worker.Internal.Types (Algo, Stateful,
                                                         WorkerConfig (..),
                                                         WorkerConnections (..),
                                                         WorkerInfo (..),
-                                                        WorkerName,
+                                                        WorkerName (..),
                                                         WorkerResult (..))
+import           System.Log.Logger                     (errorM, infoM)
 import           System.ZMQ4                           (Pull (..), Push (..),
                                                         Sub (..), context,
                                                         receive, send)
-
-
 
 
 
@@ -42,14 +41,15 @@ runWorker
     -> Algo a s
     -> WorkerConfig
     -> Stateful s ()
-runWorker name algo WorkerConfig{..} = do
+runWorker name@WorkerName{..} algo WorkerConfig{..} = do
+    liftIO $ infoM wName "Running worker..."
     workerConnections@WorkerConnections{..} <- liftIO connections
     forever $ do
         msg                  <- liftIO $ receive fromController
         QMessage{cnt = cnt'} <- lift   $ exceptDecodeBS msg
         case cnt' of
           T task@Task{} -> runAlgo algo workerConnections task `catchError` moniqueErrorHandler
-          other         -> liftIO . print $ "Error Network.Monique.Worker.Internal.Queue: " ++ show other
+          other         -> liftIO . errorM wName $ "Error Network.Monique.Worker.Internal.Queue: " ++ show other
 
   where
     (_, toControllerP) = twinPort fromControllerP
@@ -73,9 +73,11 @@ runWorker name algo WorkerConfig{..} = do
         -> WorkerConnections
         -> Task
         -> Stateful s ()
-    runAlgo algo' workerConnections@WorkerConnections{..} task@Task{..} =
+    runAlgo algo' workerConnections@WorkerConnections{..} task@Task{..} = do
+      liftIO $ infoM wName "Start execution..."
       executeAlgo algo' `catchError` workerExceptionHandler
                         `catch` (\(x :: SomeException) -> workerExceptionHandler x)
+      liftIO $ infoM wName "Execution completed!"
       where
         executeAlgo :: FromJSON a => Algo a s -> Stateful s ()
         executeAlgo algo'' = do

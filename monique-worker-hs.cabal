@@ -1,5 +1,5 @@
 name:                monique-worker-hs
-version:             0.2.4.0
+version:             0.2.4.1
 synopsis:            Worker library for monique system
 description:
   Worker library for monique system
@@ -28,6 +28,7 @@ library
                      , optparse-generic
                      , bytestring
                      , zeromq4-haskell
+                     , hslogger
                      , exceptions
                      , text
                      , mtl
