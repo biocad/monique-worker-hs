@@ -82,7 +82,7 @@ runWorker name@WorkerName{..} algo WorkerConfig{..} = do
         executeAlgo :: FromJSON a => Algo a s -> Stateful s ()
         executeAlgo algo'' = do
             taskConfig       <- lift $ exceptDecodeValue tConfig
-            let workerInfo = WorkerInfo tUser tId name workerConnections
+            let workerInfo = WorkerInfo tUser tId name workerConnections configText
             WorkerResult{..} <- algo'' workerInfo taskConfig
 
             completedTask    <- completeTask task taskResult

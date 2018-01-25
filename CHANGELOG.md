@@ -6,8 +6,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
-## [0.2.4.0] - 2017-11-12
+## [0.2.4.2] - 2018-01-25
 ### Changed
-- добавили обязательный аргумент для запуска воркера - его имя (более подробно читай в README.md);
-- обновили документацию до более адекватного состояния;
+- one parameter to config file and nothing more.
+
+## [0.2.4.1] - 2017-11-17
+### Added
+- hslogger to log.
+
+
+## [0.2.4.0] - 2017-11-12
+### Added
+- name for worker as one of the parameter to run worker.
+
+### Changed
+- updated documentation.
 
