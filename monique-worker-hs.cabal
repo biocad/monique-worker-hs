@@ -1,5 +1,5 @@
 name:                monique-worker-hs
-version:             0.2.4.2
+version:             0.2.4.3
 synopsis:            Worker library for monique system
 description:
   Worker library for monique system
