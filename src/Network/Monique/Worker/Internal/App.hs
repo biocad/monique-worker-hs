@@ -7,18 +7,18 @@
 {-# LANGUAGE TypeOperators      #-}
 
 module Network.Monique.Worker.Internal.App
-  ( runApp, moniqueHost
+  ( runApp
   ) where
 
 import           Control.Monad.Except                  (runExceptT)
 import           Control.Monad.State                   (evalStateT, liftIO)
 import           Data.Aeson                            (FromJSON (..))
-import           Data.Maybe                            (fromMaybe)
-import           Network.Monique.Core                  (Host, Port, moniqueHost)
+import           Data.Aeson.Picker                     ((|--))
+import           Data.Text.IO                          as TIO (readFile)
 import           Network.Monique.Worker.Internal.Queue (WorkerConfig (..),
                                                         runWorker)
 import           Network.Monique.Worker.Internal.Types (Algo, WorkerName (..))
-import           Options.Generic
+import           Options
 import           System.IO                             (BufferMode (..),
                                                         hSetBuffering, stdout)
 import           System.Log.Formatter
@@ -26,17 +26,12 @@ import           System.Log.Handler                    (setFormatter)
 import           System.Log.Handler.Simple
 import           System.Log.Logger
 
-data RunOptions w =
-  RunOptions { host :: w  ::: Maybe Host       <?> "Host to controller (default: monique.bi.biocad.ru)"
-             , port :: w  ::: Port             <?> "Port to controller"
-             , hostS :: w ::: Maybe Host       <?> "Host to scheduler (default: monique.bi.biocad.ru)"
-             , portS :: w ::: Port             <?> "Port to scheduler (usually 4050 for Local/Develop and 5050 for Production)"
-             , logfile :: w ::: Maybe FilePath <?> "Path to log file"
-             } deriving (Generic)
+newtype AppOptions = AppOptions { optConfigFile :: FilePath }
 
-
-instance ParseRecord (RunOptions Wrapped)
-deriving instance Show (RunOptions Unwrapped)
+instance Options AppOptions where
+  defineOptions = pure AppOptions
+    <*> simpleOption "config-file" "config.json"
+        "Path to file with configurations."
 
 runApp
   :: FromJSON a
@@ -46,14 +41,26 @@ runApp
   -> IO ()
 runApp name@WorkerName{..} initialState algo = do
     hSetBuffering stdout LineBuffering
-    RunOptions{..} <- unwrapRecord "Monique worker start"
-    
-    let logfile' = fromMaybe "debug.log" logfile
-    h <- fileHandler logfile' DEBUG >>= \lh -> return $
-         setFormatter lh (simpleLogFormatter "[$time : $loggername : $prio] $msg")
-    updateGlobalLogger wName (addHandler h)
-    updateGlobalLogger wName (setLevel DEBUG)
-    
-    let workerConfig = WorkerConfig (fromMaybe moniqueHost host) port (fromMaybe moniqueHost hostS) portS
-    _ <- liftIO . runExceptT . evalStateT (runWorker name algo workerConfig) $ initialState
-    pure ()
+  
+    runCommand $ \AppOptions{..} _ -> do
+        wc@WorkerConfig{} <- loadConfig optConfigFile
+
+        -- setup logging
+        h <- fileHandler (logfile wc) DEBUG >>= \lh -> return $
+          setFormatter lh (simpleLogFormatter "[$time : $loggername : $prio] $msg")
+        updateGlobalLogger wName (addHandler h)
+        updateGlobalLogger wName (setLevel DEBUG)
+
+        _ <- liftIO . runExceptT . evalStateT (runWorker name algo wc) $ initialState
+        pure ()
+
+-- | load from config file as in conventions here: https://api.biocad.ru/Infrastructure/%D0%9A%D0%BE%D0%BD%D0%B2%D0%B5%D0%BD%D1%86%D0%B8%D0%B8/config.json
+loadConfig :: FilePath -> IO WorkerConfig
+loadConfig configPath = do
+  configText <- TIO.readFile configPath
+  let controllerH' = configText |-- ["deploy", "monique", "host"]
+  let controllerP' = configText |-- ["deploy", "monique", "port"]
+  let queueH'      = configText |-- ["deploy", "monique", "host-scheduler"]
+  let queueP'      = configText |-- ["deploy", "monique", "port-scheduler"]
+  let logfile'     = configText |-- ["deploy", "monique", "logfile"]
+  pure $ WorkerConfig controllerH' controllerP' queueH' queueP' logfile' configText

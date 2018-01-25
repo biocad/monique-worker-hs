@@ -1,0 +1,18 @@
+{
+    "build": {
+        "deps": [
+            "libzmq3-dev",
+            "libgmp10",
+            "netbase" ],
+        "tests": []
+    },
+    "deploy": {
+        "monique": {
+            "host": "localhost",
+            "port": 4102,
+            "host-scheduler": "localhost",
+            "port-scheduler": 4050,
+            "logfile": "exampleB.log"
+        }
+    }
+}

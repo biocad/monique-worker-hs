@@ -12,6 +12,7 @@ module Network.Monique.Worker.Internal.Types
 
 import           Control.Monad.Except       (ExceptT, throwError)
 import           Control.Monad.State        (StateT)
+import           Data.Text                  (Text)
 import           Network.Monique.Core       (Host, Port, UserId)
 import           Network.Monique.Core.Data  (TaskId, TaskMessage,
                                              TaskResult (..), UData, UType)
@@ -28,10 +29,11 @@ data WorkerResult = WorkerResult { taskResult   :: TaskResult
                                  , userdataList :: [(UType, UData)]
                                  } deriving (Show)
 
-data WorkerInfo = WorkerInfo { curUserId   :: UserId      -- ^ use UserId to save userdata
-                             , curTaskId   :: TaskId      -- ^ use TaskId to call foreign workers
-                             , workerName  :: WorkerName  -- ^ use WorkerName to throw error and write log
-                             , connections :: WorkerConnections
+data WorkerInfo = WorkerInfo { curUserId   :: UserId            -- ^ use UserId to save userdata
+                             , curTaskId   :: TaskId            -- ^ use TaskId to call foreign workers
+                             , workerName  :: WorkerName        -- ^ use WorkerName to throw error and write log
+                             , connections :: WorkerConnections -- ^ use WorkerConnections to conect to queue
+                             , configT     :: Text              -- ^ use Text with config to load custom fields
                              }
 
 data WorkerConfig =
@@ -39,6 +41,8 @@ data WorkerConfig =
                   , fromControllerP :: Port
                   , queueH          :: Host
                   , fromQueueP      :: Port
+                  , logfile         :: FilePath
+                  , configText      :: Text
                   }
 
 data WorkerConnections = WorkerConnections { toController   :: Socket Push

@@ -1,5 +1,5 @@
 name:                monique-worker-hs
-version:             0.2.4.1
+version:             0.2.4.2
 synopsis:            Worker library for monique system
 description:
   Worker library for monique system
@@ -25,13 +25,14 @@ library
   build-depends:       base >= 4.7 && < 5
                      , monique-core
                      , aeson
-                     , optparse-generic
+                     , options
                      , bytestring
                      , zeromq4-haskell
                      , hslogger
                      , exceptions
                      , text
                      , mtl
+                     , aeson-picker
   default-language:    Haskell2010
 
 executable exampleA
