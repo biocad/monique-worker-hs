@@ -1,4 +1,7 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
+{-# LANGUAGE RecordWildCards      #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 module Network.Monique.Worker.Internal.Types
   ( Algo, Stateful
@@ -10,8 +13,11 @@ module Network.Monique.Worker.Internal.Types
   , UType, UData, TaskResult (..), UserId, TaskMessage
   ) where
 
-import           Control.Monad.Except       (ExceptT, throwError)
-import           Control.Monad.State        (StateT)
+import           Control.Exception.Safe     (MonadThrow)
+import           Control.Monad.Catch        (throwM)
+import           Control.Monad.Except       (ExceptT, MonadError (..),
+                                             throwError)
+import           Control.Monad.State        (StateT (..))
 import           Data.Text                  (Text)
 import           Network.Monique.Core       (Host, Port, UserId)
 import           Network.Monique.Core.Data  (TaskId, TaskMessage,
@@ -23,7 +29,18 @@ import           System.ZMQ4                (Pull (..), Push (..), Socket,
 
 newtype WorkerName = WorkerName { wName :: String }
 
-type Stateful s a = StateT s (ExceptT MoniqueError IO) a
+type Stateful s = StateT s (ExceptT MoniqueError IO)
+
+instance {-# OVERLAPPING #-} Monad (Stateful s) where
+  return = pure
+  -- TODO: empty wName is a crutch
+  fail = throwError . WorkerError ""
+  m >>= k = StateT $ \ s -> do
+    ~(a, s') <- runStateT m s
+    runStateT (k a) s'
+
+instance {-# OVERLAPPING #-} MonadThrow (Stateful s) where
+  throwM e = throwError . WorkerError "" $ show e
 
 data WorkerResult = WorkerResult { taskResult   :: TaskResult
                                  , userdataList :: [(UType, UData)]
@@ -61,4 +78,3 @@ throwWorkerError WorkerName{..} = throwError . WorkerError wName
 
 throwWorkerErrorI :: WorkerInfo -> String -> Stateful s WorkerResult
 throwWorkerErrorI WorkerInfo{..} = throwWorkerError workerName
-
